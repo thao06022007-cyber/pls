@@ -5,41 +5,50 @@ import os
 
 st.title("📊 AI Survey Analysis")
 
-# 🔐 lấy API key từ Secrets (Streamlit Cloud)
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# 🔐 API KEY từ Secrets
+api_key = os.getenv("GROQ_API_KEY")
 
-uploaded_file = st.file_uploader("Upload file Excel", type=["xlsx"])
+if not api_key:
+    st.error("❌ Không tìm thấy API KEY. Hãy kiểm tra Secrets.")
+else:
+    client = Groq(api_key=api_key)
 
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
+    uploaded_file = st.file_uploader("Upload file Excel", type=["xlsx"])
 
-    st.subheader("📂 Dữ liệu mẫu")
-    st.write(df.head())
+    if uploaded_file:
+        try:
+            df = pd.read_excel(uploaded_file)
 
-    # 🧹 làm sạch dữ liệu
-    df["Content"] = df["Content"].astype(str)
-    df = df[df["Content"].str.strip() != ""]
+            st.subheader("📂 Dữ liệu mẫu")
+            st.write(df.head())
 
-    # 🔥 FIX: đảm bảo Cluster là số + sắp xếp đúng thứ tự
-    df["Cluster"] = df["Cluster"].astype(int)
+            # 🧹 Làm sạch Content
+            df["Content"] = df["Content"].astype(str)
+            df = df[df["Content"].str.strip() != ""]
 
-    clusters = (
-        df.groupby("Cluster")["Content"]
-        .apply(list)
-        .sort_index()
-    )
+            # 🔥 FIX lỗi Cluster (quan trọng)
+            df["Cluster"] = pd.to_numeric(df["Cluster"], errors="coerce")
+            df = df.dropna(subset=["Cluster"])
+            df["Cluster"] = df["Cluster"].astype(int)
 
-    st.subheader("📊 Kết quả phân tích")
+            # 📊 Group + sort
+            clusters = (
+                df.groupby("Cluster")["Content"]
+                .apply(list)
+                .sort_index()
+            )
 
-    # 🔥 nút bấm tránh lag
-    if st.button("🚀 Phân tích"):
-        for c, texts in clusters.items():
-            st.markdown(f"### 🔹 Cluster {c}")
+            st.subheader("📊 Kết quả phân tích")
 
-            # giảm dữ liệu cho nhanh
-            text = "\n".join(texts[:3])
+            # 🔥 Nút bấm tránh lag
+            if st.button("🚀 Phân tích"):
+                for c, texts in clusters.items():
+                    st.markdown(f"### 🔹 Cluster {c}")
 
-            prompt = f"""
+                    # giảm dữ liệu cho nhanh
+                    text = "\n".join(texts[:3])
+
+                    prompt = f"""
 Phân tích các câu trả lời sau:
 
 1. Chủ đề chính (1 câu ngắn)
@@ -50,9 +59,16 @@ Phân tích các câu trả lời sau:
 {text}
 """
 
-            response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[{"role": "user", "content": prompt}]
-            )
+                    try:
+                        response = client.chat.completions.create(
+                            model="llama-3.1-8b-instant",
+                            messages=[{"role": "user", "content": prompt}]
+                        )
 
-            st.write(response.choices[0].message.content)
+                        st.write(response.choices[0].message.content)
+
+                    except Exception as e:
+                        st.error(f"Lỗi khi gọi AI: {e}")
+
+        except Exception as e:
+            st.error(f"❌ Lỗi đọc file: {e}")
