@@ -17,7 +17,9 @@ if uploaded_file:
     df["Content"] = df["Content"].astype(str)
     df = df[df["Content"].str.strip() != ""]
 
-    clusters = df.groupby("Cluster")["Content"].apply(list)
+df["Cluster"] = df["Cluster"].astype(int)
+
+clusters = df.groupby("Cluster")["Content"].apply(list).sort_index()
 
     if st.button("🚀 Phân tích"):
         for c, texts in clusters.items():
